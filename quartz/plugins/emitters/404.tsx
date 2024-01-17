@@ -25,6 +25,10 @@ export const NotFoundPage: QuartzEmitterPlugin = () => {
     getQuartzComponents() {
       return [Head, Body, pageBody, Footer]
     },
+    async fileDependencies(_ctx, _content, _resources) {
+      // This emitter doesn't depend on any user-defined content
+      return {}
+    },
     async emit(ctx, _content, resources, emit): Promise<FilePath[]> {
       const cfg = ctx.cfg.configuration
       const slug = "404" as FullSlug

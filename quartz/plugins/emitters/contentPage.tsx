@@ -4,7 +4,7 @@ import HeaderConstructor from "../../components/Header"
 import BodyConstructor from "../../components/Body"
 import { pageResources, renderPage } from "../../components/renderPage"
 import { FullPageLayout } from "../../cfg"
-import { FilePath, pathToRoot } from "../../util/path"
+import { FilePath, joinSegments, pathToRoot, resolveRelative } from "../../util/path"
 import { defaultContentPageLayout, sharedPageComponents } from "../../../quartz.layout"
 import { Content } from "../../components"
 import chalk from "chalk"
@@ -25,6 +25,17 @@ export const ContentPage: QuartzEmitterPlugin<Partial<FullPageLayout>> = (userOp
     name: "ContentPage",
     getQuartzComponents() {
       return [Head, Header, Body, ...header, ...beforeBody, pageBody, ...left, ...right, Footer]
+    },
+    async fileDependencies(ctx, content, _resources) {
+      const graph: Record<string, FilePath[]> = {}
+
+      for (const [_tree, file] of content) {
+        const sourcePath = file.data.filePath!
+        const slug = file.data.slug!
+        graph[sourcePath] = [joinSegments(ctx.argv.output, slug + ".html") as FilePath]
+      }
+
+      return graph
     },
     async emit(ctx, content, resources, emit): Promise<FilePath[]> {
       const cfg = ctx.cfg.configuration
@@ -58,7 +69,8 @@ export const ContentPage: QuartzEmitterPlugin<Partial<FullPageLayout>> = (userOp
         fps.push(fp)
       }
 
-      if (!containsIndex) {
+      // TODO better conditional
+      if (!containsIndex && !ctx.argv.serveIncremental) {
         console.log(
           chalk.yellow(
             `\nWarning: you seem to be missing an \`index.md\` home page file at the root of your \`${ctx.argv.directory}\` folder. This may cause errors when deploying.`,

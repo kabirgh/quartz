@@ -43,6 +43,11 @@ export type QuartzEmitterPluginInstance = {
     emitCallback: EmitCallback,
   ): Promise<FilePath[]>
   getQuartzComponents(ctx: BuildCtx): QuartzComponent[]
+  fileDependencies: (
+    ctx: BuildCtx,
+    content: ProcessedContent[],
+    resources: StaticResources,
+  ) => Promise<Record<string, FilePath[]>>
 }
 
 export interface EmitOptions {

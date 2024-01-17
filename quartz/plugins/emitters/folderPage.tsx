@@ -35,6 +35,10 @@ export const FolderPage: QuartzEmitterPlugin<FullPageLayout> = (userOpts) => {
     getQuartzComponents() {
       return [Head, Header, Body, ...header, ...beforeBody, pageBody, ...left, ...right, Footer]
     },
+    async fileDependencies(ctx, content, resources) {
+      // TODO
+      return {}
+    },
     async emit(ctx, content, resources, emit): Promise<FilePath[]> {
       const fps: FilePath[] = []
       const allFiles = content.map((c) => c[1].data)

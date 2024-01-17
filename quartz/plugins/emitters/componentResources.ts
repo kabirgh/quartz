@@ -93,7 +93,7 @@ function addGlobalPageResources(
       function gtag() { dataLayer.push(arguments); }
       gtag("js", new Date());
       gtag("config", "${tagId}", { send_page_view: false });
-  
+
       document.addEventListener("nav", () => {
         gtag("event", "page_view", {
           page_title: document.title,
@@ -121,7 +121,7 @@ function addGlobalPageResources(
       umamiScript.src = "https://analytics.umami.is/script.js"
       umamiScript.setAttribute("data-website-id", "${cfg.analytics.websiteId}")
       umamiScript.async = true
-  
+
       document.head.appendChild(umamiScript)
     `)
   }
@@ -167,6 +167,10 @@ export const ComponentResources: QuartzEmitterPlugin<Options> = (opts?: Partial<
     name: "ComponentResources",
     getQuartzComponents() {
       return []
+    },
+    async fileDependencies(_ctx, _content, _resources) {
+      // TODO return dep on sass files
+      return {}
     },
     async emit(ctx, _content, resources, emit): Promise<FilePath[]> {
       // component specific scripts and styles

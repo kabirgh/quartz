@@ -91,6 +91,22 @@ export const ContentIndex: QuartzEmitterPlugin<Partial<Options>> = (opts) => {
   opts = { ...defaultOptions, ...opts }
   return {
     name: "ContentIndex",
+    async fileDependencies(ctx, content, _resources) {
+      const graph: Record<string, FilePath[]> = {}
+
+      for (const [_tree, file] of content) {
+        const sourcePath = file.data.filePath!
+
+        graph[sourcePath] = [joinSegments(ctx.argv.output, "static/contentIndex.json") as FilePath]
+        if (opts?.enableSiteMap) {
+          graph[sourcePath].push(joinSegments(ctx.argv.output, "sitemap.xml") as FilePath)
+        }
+        if (opts?.enableRSS) {
+          graph[sourcePath].push(joinSegments(ctx.argv.output, "index.xml") as FilePath)
+        }
+      }
+      return graph
+    },
     async emit(ctx, content, _resources, emit) {
       const cfg = ctx.cfg.configuration
       const emitted: FilePath[] = []
