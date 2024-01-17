@@ -7,7 +7,7 @@ import { isGitIgnored } from "globby"
 import chalk from "chalk"
 import { parseMarkdown } from "./processors/parse"
 import { filterContent } from "./processors/filter"
-import { emitContent } from "./processors/emit"
+import { emitContent, incrementalEmit } from "./processors/emit"
 import cfg from "../quartz.config"
 import { FilePath, joinSegments, slugifyFilePath } from "./util/path"
 import chokidar from "chokidar"
@@ -17,6 +17,8 @@ import { glob, toPosixPath } from "./util/glob"
 import { trace } from "./util/trace"
 import { options } from "./util/sourcemap"
 import { Mutex } from "async-mutex"
+import { getStaticResourcesFromPlugins } from "./plugins"
+import { DependencyGraph } from "./util/types"
 
 async function buildQuartz(argv: Argv, mut: Mutex, clientRefresh: () => void) {
   const ctx: BuildCtx = {
@@ -61,7 +63,40 @@ async function buildQuartz(argv: Argv, mut: Mutex, clientRefresh: () => void) {
 
   if (argv.serve) {
     return startServing(ctx, mut, parsedFiles, clientRefresh)
+  } else if (argv.serveIncremental) {
+    const dependencyGraph = await buildDependencyGraph(ctx, filteredContent)
+    return startServing(ctx, mut, parsedFiles, clientRefresh, dependencyGraph)
   }
+}
+
+async function buildDependencyGraph(
+  ctx: BuildCtx,
+  content: ProcessedContent[],
+): Promise<DependencyGraph> {
+  const { argv, cfg } = ctx
+  const perf = new PerfTimer()
+  perf.addEvent("buildGraph")
+
+  const graph: DependencyGraph = {}
+
+  for (const emitter of cfg.plugins.emitters) {
+    try {
+      const deps = await emitter.fileDependencies(ctx, content, getStaticResourcesFromPlugins(ctx))
+
+      for (const [src, destinations] of Object.entries(deps)) {
+        if (!graph[src]) {
+          graph[src] = []
+        }
+        graph[src].push({ emitterName: emitter.name, destinations })
+      }
+    } catch (err) {
+      trace(`Failed to build dependency graph for emitter \`${emitter.name}\``, err as Error)
+    }
+  }
+
+  console.log(`Built dependency graph in ${perf.timeSince("buildGraph")}`)
+
+  return graph
 }
 
 // setup watcher for rebuilds
@@ -70,14 +105,19 @@ async function startServing(
   mut: Mutex,
   initialContent: ProcessedContent[],
   clientRefresh: () => void,
+  dependencyGraph?: DependencyGraph,
 ) {
   const { argv } = ctx
 
   const ignored = await isGitIgnored()
   const contentMap = new Map<FilePath, ProcessedContent>()
-  for (const content of initialContent) {
-    const [_tree, vfile] = content
-    contentMap.set(vfile.data.filePath!, content)
+
+  // TODO clean up
+  if (!argv.serveIncremental) {
+    for (const content of initialContent) {
+      const [_tree, vfile] = content
+      contentMap.set(vfile.data.filePath!, content)
+    }
   }
 
   const initialSlugs = ctx.allSlugs
@@ -129,7 +169,16 @@ async function startServing(
         .filter((fp) => !toRemove.has(fp))
         .map((fp) => slugifyFilePath(path.posix.relative(argv.directory, fp) as FilePath))
 
-      ctx.allSlugs = [...new Set([...initialSlugs, ...trackedSlugs])]
+      // TODO clean up
+      if (argv.serveIncremental) {
+        // Don't parse all files if we're serving incrementally
+        ctx.allSlugs = [...filesToRebuild].map((fp) =>
+          slugifyFilePath(path.posix.relative(argv.directory, fp) as FilePath),
+        )
+      } else {
+        ctx.allSlugs = [...new Set([...initialSlugs, ...trackedSlugs])]
+      }
+
       const parsedContent = await parseMarkdown(ctx, filesToRebuild)
       for (const content of parsedContent) {
         const [_tree, vfile] = content
@@ -143,10 +192,17 @@ async function startServing(
       const parsedFiles = [...contentMap.values()]
       const filteredContent = filterContent(ctx, parsedFiles)
 
-      // TODO: we can probably traverse the link graph to figure out what's safe to delete here
-      // instead of just deleting everything
-      await rimraf(argv.output)
-      await emitContent(ctx, filteredContent)
+      if (argv.serveIncremental) {
+        if (ctx.argv.verbose && toRemove.size > 0) {
+          console.log("[build] Deleting files:", [...toRemove].join(", "))
+        }
+        await rimraf([...toRemove])
+        await incrementalEmit(ctx, filteredContent, filePath, dependencyGraph!)
+        contentMap.clear()
+      } else if (argv.serve) {
+        await emitContent(ctx, filteredContent)
+      }
+
       console.log(chalk.green(`Done rebuilding in ${perf.timeSince()}`))
     } catch (err) {
       console.log(chalk.yellow(`Rebuild failed. Waiting on a change to fix the error...`))

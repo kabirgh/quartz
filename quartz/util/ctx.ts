@@ -6,6 +6,7 @@ export interface Argv {
   verbose: boolean
   output: string
   serve: boolean
+  serveIncremental: boolean
   port: number
   wsPort: number
   remoteDevHost?: string

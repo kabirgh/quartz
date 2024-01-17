@@ -71,6 +71,12 @@ export const BuildArgv = {
     default: false,
     describe: "run a local server to live-preview your Quartz",
   },
+  serveIncremental: {
+    boolean: true,
+    default: false,
+    describe:
+      "[experimental] run a local server to live-preview your Quartz, and rebuild incrementally",
+  },
   baseDir: {
     string: true,
     default: "",
