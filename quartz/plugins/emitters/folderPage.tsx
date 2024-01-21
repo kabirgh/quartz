@@ -18,6 +18,7 @@ import {
 import { defaultListPageLayout, sharedPageComponents } from "../../../quartz.layout"
 import { FolderContent } from "../../components"
 import { write } from "./helpers"
+import DepGraph from "../../depgraph"
 
 export const FolderPage: QuartzEmitterPlugin<FullPageLayout> = (userOpts) => {
   const opts: FullPageLayout = {
@@ -35,6 +36,13 @@ export const FolderPage: QuartzEmitterPlugin<FullPageLayout> = (userOpts) => {
     name: "FolderPage",
     getQuartzComponents() {
       return [Head, Header, Body, ...header, ...beforeBody, pageBody, ...left, ...right, Footer]
+    },
+    async getDependencyGraph(ctx, content, _resources) {
+      // Example graph:
+      // nested/file.md --> nested/file.html
+      //          \-------> nested/index.html
+      // TODO implement
+      return new DepGraph()
     },
     async emit(ctx, content, resources): Promise<FilePath[]> {
       const fps: FilePath[] = []
