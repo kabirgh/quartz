@@ -15,6 +15,7 @@ import {
 import { defaultListPageLayout, sharedPageComponents } from "../../../quartz.layout"
 import { TagContent } from "../../components"
 import { write } from "./helpers"
+import DepGraph from "../../depgraph"
 
 export const TagPage: QuartzEmitterPlugin<FullPageLayout> = (userOpts) => {
   const opts: FullPageLayout = {
@@ -32,6 +33,10 @@ export const TagPage: QuartzEmitterPlugin<FullPageLayout> = (userOpts) => {
     name: "TagPage",
     getQuartzComponents() {
       return [Head, Header, Body, ...header, ...beforeBody, pageBody, ...left, ...right, Footer]
+    },
+    async getDependencyGraph(ctx, _content, _resources) {
+      // TODO implement
+      return new DepGraph()
     },
     async emit(ctx, content, resources): Promise<FilePath[]> {
       const fps: FilePath[] = []
