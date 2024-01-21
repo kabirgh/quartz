@@ -20,6 +20,9 @@ import { Mutex } from "async-mutex"
 import DepGraph from "./depgraph"
 import { getStaticResourcesFromPlugins } from "./plugins"
 
+import fs from "fs"
+import { performance } from "perf_hooks"
+
 type BuildData = {
   ctx: BuildCtx
   ignored: GlobbyFilterFunction
@@ -147,6 +150,7 @@ export async function partialRebuild(
   const { ctx, ignored, depGraphs, contentMap } = buildData
   const { argv, cfg } = ctx
   const toRemove = new Set<FilePath>()
+  const startTime = performance.now()
 
   // don't do anything for gitignored files
   if (ignored(filepath)) {
@@ -201,6 +205,11 @@ export async function partialRebuild(
   if (argv.verbose) {
     console.log(`Updated dependency graphs in ${perf.timeSince()}`)
   }
+  // Dep graph time
+  fs.appendFileSync(
+    "C:\\Users\\Kabir\\Desktop\\benchmark_partial.csv",
+    Math.round(performance.now() - startTime).toString(),
+  )
 
   // EMIT
   perf.addEvent("rebuild")
@@ -244,6 +253,11 @@ export async function partialRebuild(
       emittedFiles += emittedFps.length
     }
   }
+  // Emit time
+  fs.appendFileSync(
+    "C:\\Users\\Kabir\\Desktop\\benchmark_partial.csv",
+    "," + Math.round(performance.now() - startTime).toString(),
+  )
 
   console.log(`Emitted ${emittedFiles} files to \`${argv.output}\` in ${perf.timeSince("rebuild")}`)
 
@@ -257,7 +271,20 @@ export async function partialRebuild(
     Object.values(depGraphs).forEach((depGraph) => depGraph.removeNode(file))
   }
 
+  // Delete time
+  fs.appendFileSync(
+    "C:\\Users\\Kabir\\Desktop\\benchmark_partial.csv",
+    "," + Math.round(performance.now() - startTime).toString(),
+  )
+
   clientRefresh()
+
+  const timeTaken = Math.round(performance.now() - startTime)
+  console.log(`Rebuild took ${timeTaken}ms`)
+  fs.appendFileSync(
+    "C:\\Users\\Kabir\\Desktop\\benchmark_partial.csv",
+    "," + timeTaken.toString() + "\n",
+  )
 }
 
 export async function rebuild(
@@ -266,6 +293,8 @@ export async function rebuild(
   clientRefresh: () => void,
   buildData: BuildData, // note: this function mutates buildData
 ) {
+  const startTime = performance.now()
+
   const { ctx, ignored, mut, initialSlugs, contentMap, trackedAssets, lastBuildMs } = buildData
 
   const { argv } = ctx
@@ -330,10 +359,29 @@ export async function rebuild(
     const parsedFiles = [...contentMap.values()]
     const filteredContent = filterContent(ctx, parsedFiles)
 
+    // Parse time
+    fs.appendFileSync(
+      "C:\\Users\\Kabir\\Desktop\\benchmark.csv",
+      Math.round(performance.now() - startTime).toString(),
+    )
+
     // TODO: we can probably traverse the link graph to figure out what's safe to delete here
     // instead of just deleting everything
     await rimraf(argv.output)
+
+    // Also delete time
+    fs.appendFileSync(
+      "C:\\Users\\Kabir\\Desktop\\benchmark.csv",
+      "," + Math.round(performance.now() - startTime).toString(),
+    )
+
     await emitContent(ctx, filteredContent)
+
+    // Also emit time
+    fs.appendFileSync(
+      "C:\\Users\\Kabir\\Desktop\\benchmark.csv",
+      "," + Math.round(performance.now() - startTime).toString(),
+    )
     console.log(chalk.green(`Done rebuilding in ${perf.timeSince()}`))
   } catch (err) {
     console.log(chalk.yellow(`Rebuild failed. Waiting on a change to fix the error...`))
@@ -344,6 +392,11 @@ export async function rebuild(
 
   release()
   clientRefresh()
+
+  const timeTaken = Math.round(performance.now() - startTime)
+  console.log(`Rebuild took ${timeTaken}ms`)
+  // Total time
+  fs.appendFileSync("C:\\Users\\Kabir\\Desktop\\benchmark.csv", "," + timeTaken.toString() + "\n")
 }
 
 export default async (argv: Argv, mut: Mutex, clientRefresh: () => void) => {
