@@ -146,6 +146,7 @@ export async function partialRebuild(
 ) {
   const { ctx, ignored, depGraphs, contentMap } = buildData
   const { argv, cfg } = ctx
+  const toRemove = new Set<FilePath>()
 
   // don't do anything for gitignored files
   if (ignored(filepath)) {
@@ -193,12 +194,7 @@ export async function partialRebuild(
       }
       break
     case "delete":
-      // remove from cache when file is deleted
-      contentMap.delete(fp)
-
-      // remove the node from the graph
-      // we don't need to call the emitters again because file deletion cannot affect other files dependencies
-      Object.values(depGraphs).forEach((depGraph) => depGraph.removeNode(fp))
+      toRemove.add(fp)
       break
   }
 
@@ -209,6 +205,7 @@ export async function partialRebuild(
   // EMIT
   perf.addEvent("rebuild")
   let emittedFiles = 0
+  const destinationsToDelete = new Set<FilePath>()
 
   for (const emitter of cfg.plugins.emitters) {
     const depGraph = depGraphs[emitter.name]
@@ -223,9 +220,17 @@ export async function partialRebuild(
       // if a.md changes, we need to re-emit contentIndex.json,
       // and supply [a.md, b.md] to the emitter
       const upstreams = [...depGraph.getUpstreamsOfDownstreamLeafNodes(fp)] as FilePath[]
+
+      if (action == "delete" && upstreams.length === 1) {
+        // if there's only one upstream, the destination is solely dependent on this file
+        destinationsToDelete.add(upstreams[0])
+      }
+
       const upstreamContent = upstreams
         // filter out non-markdown files
         .filter((file) => contentMap.has(file))
+        // if file was deleted, don't give it to the emitter
+        .filter((file) => !toRemove.has(file))
         .map((file) => contentMap.get(file)!)
 
       const emittedFps = await emitter.emit(ctx, upstreamContent, staticResources)
@@ -241,6 +246,16 @@ export async function partialRebuild(
   }
 
   console.log(`Emitted ${emittedFiles} files to \`${argv.output}\` in ${perf.timeSince("rebuild")}`)
+
+  // CLEANUP
+  for (const file of toRemove) {
+    // delete files that are solely dependent on this file
+    await rimraf([...destinationsToDelete])
+    // remove from cache
+    contentMap.delete(file)
+    // remove the node from dependency graphs
+    Object.values(depGraphs).forEach((depGraph) => depGraph.removeNode(file))
+  }
 
   clientRefresh()
 }
